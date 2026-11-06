@@ -11,9 +11,11 @@ import net.labymod.api.event.client.render.PlayerNameTagRenderEvent;
 public class GGNameTagListener {
 
   private final GrieferGames griefergames;
+  private final OriginalDisplayNames originalDisplayNames;
 
-  public GGNameTagListener(GrieferGames griefergames) {
+  public GGNameTagListener(GrieferGames griefergames, OriginalDisplayNames originalDisplayNames) {
     this.griefergames = griefergames;
+    this.originalDisplayNames = originalDisplayNames;
   }
 
   @Subscribe
@@ -26,8 +28,13 @@ public class GGNameTagListener {
     NetworkPlayerInfo playerInfo = event.getPlayerInfo();
     if (playerInfo == null) return;
     if (event.tagType() != TagType.MAIN_TAG) return;
-    if (playerInfo.displayName() instanceof TextComponent) {
-      event.setNameTag(removeMarker((TextComponent) playerInfo.displayName()));
+    // Originalen Namen holen (ohne Änderungen durch "Magische Prefixe ersetzen")
+    // und nur auf einer Kopie arbeiten, damit die Tabliste nicht verändert wird.
+    Component original = originalDisplayNames.resolve(playerInfo);
+    if (original == null) return;
+    Component copy = original.copy();
+    if (copy instanceof TextComponent) {
+      event.setNameTag(removeMarker((TextComponent) copy));
     }
   }
 

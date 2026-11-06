@@ -17,10 +17,12 @@ import java.util.regex.Pattern;
 
 public class GGKeyListener {
   private final GrieferGames griefergames;
+  private final OriginalDisplayNames originalDisplayNames;
   private final Pattern antiMagicPrefixRegex = Pattern.compile("([A-Za-z\\-]+\\+?) \\u2503 (\\u007E?\\!?\\w{1,16})");
 
-  public GGKeyListener(GrieferGames griefergames) {
+  public GGKeyListener(GrieferGames griefergames, OriginalDisplayNames originalDisplayNames) {
     this.griefergames = griefergames;
+    this.originalDisplayNames = originalDisplayNames;
   }
 
   @Subscribe
@@ -47,18 +49,26 @@ public class GGKeyListener {
               ampReplacement = GrieferGamesConfig.DEFAULT_AMP_REPLACEMENT;
             }
 
+            // Original sichern, bevor der Tablisten-Name verändert wird (für den Nametag)
+            originalDisplayNames.remember(playerInfo);
+
             List<Component> children = new ArrayList<>(playerInfo.displayName().getChildren());
             for(int i=0; i<children.size(); i++) {
               Component component = children.get(i);
               String plain = griefergames.helper().componentToPlainText(component);
 
               if(plain.equals(matcher.group(1))) {
+                // Kopie statt das Original-Objekt zu verändern
+                component = component.copy();
                 component.style(component.style().undecorate(TextDecoration.OBFUSCATED));
+                children.set(i, component);
                 Component ampPrefix = Component.text(ampReplacement+" ", component.style());
                 children.add(i, ampPrefix);
                 i++;
               } else if(plain.equals(matcher.group(2))) {
+                component = component.copy();
                 component.style(component.style().undecorate(TextDecoration.OBFUSCATED));
+                children.set(i, component);
               }
             }
             playerInfo.displayName().setChildren(children);
