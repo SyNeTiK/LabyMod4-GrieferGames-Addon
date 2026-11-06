@@ -1,0 +1,82 @@
+name: Release
+
+# Erstellt automatisch ein GitHub-Release mit der Addon-JAR, sobald auf master/main
+# eine neue Version in gradle.properties (addon.version) landet.
+# Existiert das Release/Tag für die Version schon, passiert nichts.
+# Manuell auslösbar über "Run workflow" im Actions-Tab.
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Version auslesen
+        id: version
+        run: |
+          VERSION=$(grep -E '^addon\.version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          if [ -z "$VERSION" ]; then
+            echo "addon.version nicht gefunden" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Prüfen, ob Release schon existiert
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Release ${{ steps.version.outputs.tag }} existiert bereits – übersprungen."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 25
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: 'corretto'
+          java-version: '25'
+
+      - name: Set up Gradle
+        if: steps.check.outputs.exists == 'false'
+        uses: gradle/actions/setup-gradle@5e2ebd065dc2488b7a6ad670704656cbbe1e8f60 # v6.1.1
+        with:
+          validate-wrappers: true
+
+      - name: Build
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          ./gradlew build --full-stacktrace
+          ./gradlew createReleaseJar
+
+      - name: Release erstellen
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          JARS=(build/libs/*-release.jar)
+          if [ ${#JARS[@]} -eq 0 ]; then
+            echo "Keine *-release.jar in build/libs gefunden" >&2
+            exit 1
+          fi
+          gh release create "${{ steps.version.outputs.tag }}" "${JARS[@]}" \
+            --target "${{ github.sha }}" \
+            --title "GrieferGames Addon ${{ steps.version.outputs.version }}" \
+            --generate-notes
